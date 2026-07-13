@@ -60,10 +60,33 @@ All inputs are tiny deterministic byte strings (< 200 bytes per case). No downlo
 
 ## Running
 
+**Linux / macOS:**
+
+```sh
+./run.sh
+```
+
+or manually:
+
 ```sh
 python3 run_lab.py
 python3 -m unittest -v
 ```
+
+**Windows:**
+
+```cmd
+run.bat
+```
+
+or manually:
+
+```cmd
+python run_lab.py
+python -m unittest -v
+```
+
+You can override the interpreter with `PYTHON_BIN=/path/to/python ./run.sh` (Linux/macOS) or `set PYTHON_BIN=python3.14 && run.bat` (Windows).
 
 The complete lab run normally finishes in under 20 seconds. The unittest suite normally finishes in under 10 seconds.
 
