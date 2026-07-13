@@ -63,7 +63,8 @@ All inputs are tiny deterministic byte strings (< 200 bytes per case). No downlo
 **Linux / macOS:**
 
 ```sh
-./run.sh
+./run.sh      # bash / POSIX sh
+./run.zsh     # zsh
 ```
 
 or manually:
@@ -86,7 +87,7 @@ python run_lab.py
 python -m unittest -v
 ```
 
-You can override the interpreter with `PYTHON_BIN=/path/to/python ./run.sh` (Linux/macOS) or `set PYTHON_BIN=python3.14 && run.bat` (Windows).
+You can override the interpreter with `PYTHON_BIN=/path/to/python ./run.sh` (bash) / `./run.zsh` (zsh) or `set PYTHON_BIN=python3.14 && run.bat` (Windows).
 
 The complete lab run normally finishes in under 20 seconds. The unittest suite normally finishes in under 10 seconds.
 
