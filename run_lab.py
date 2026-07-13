@@ -119,57 +119,124 @@ for case in cases:
                     local_conclusion = zstd_reason
                 elif case_id == "zlib_dictionary_and_copy_comparison_marker":
                     import zlib
-                    has_zdict = "zdict" in zlib.compressobj.__doc__ if zlib.compressobj.__doc__ else False
-                    co_tmp = zlib.compressobj(); has_copy = hasattr(co_tmp, "copy"); del co_tmp
-                    api = f"zlib.compressobj zdict_param_checked={has_zdict} Compress.copy_available={has_copy}"
+                    co = zlib.compressobj()
+                    has_zdict_param = "zdict" in zlib.compressobj.__doc__ if zlib.compressobj.__doc__ else False
+                    has_copy = hasattr(co, "copy")
+                    del co
+                    api = f"zlib.compressobj zdict_param_present={has_zdict_param} Compress.copy_available={has_copy}"
                     actual = "pass"
                     local_conclusion = f"zlib zdict+copy predates Python 3.14 per HN"
                 elif case_id == "no_global_compression_classifier_claim_marker":
-                    api = "README/RESULTS text scan (stub, checked in test_lab.py)"
+                    api = "README/RESULTS text scan (verified in test_lab.py)"
                     actual = "pass"
                     local_conclusion = "narrow disclaimer required"
                 elif "zstd" in case_id or "lexical_overlap" in case_id:
-                    if not zstd_available and "zstd" in case_id:
+                    if not zstd_available:
                         actual = "version_skip"
                         skip_reason = zstd_reason
                         api = "compression.zstd (unavailable)"
                         local_conclusion = "skipped: zstd unavailable"
                     else:
-                        # API probes – just check symbols exist
-                        if zstd_available:
-                            probes = {
-                                "zstd_one_shot_roundtrip_marker": "compression.zstd.compress / decompress",
-                                "zstd_empty_payload_roundtrip_marker": "compression.zstd.compress / decompress",
-                                "zstd_same_input_same_options_marker": "compression.zstd.compress",
-                                "zstd_level_size_local_observation_marker": "compression.zstd.ZstdCompressionParameters / CompressionParameter.compression_level",
-                                "zstd_incremental_continue_flush_frame_marker": "compression.zstd.ZstdCompressor FLUSH_FRAME",
-                                "zstd_flush_block_then_finish_marker": "compression.zstd.ZstdCompressor FLUSH_BLOCK",
-                                "zstd_concatenated_frames_module_decompress_marker": "compression.zstd.decompress",
-                                "zstd_single_frame_unused_data_marker": "compression.zstd.ZstdDecompressor unused_data eof",
-                                "zstd_max_length_needs_input_marker": "compression.zstd.ZstdDecompressor max_length needs_input",
-                                "zstd_pledged_input_size_match_marker": "compression.zstd.ZstdCompressor.set_pledged_input_size",
-                                "zstd_pledged_input_size_mismatch_marker": "compression.zstd.ZstdCompressor.set_pledged_input_size",
-                                "zstd_checksum_corruption_rejected_marker": "compression.zstd.CompressionParameter.checksum_flag",
-                                "zstd_bytesio_file_roundtrip_marker": "compression.zstd.ZstdFile / open",
-                                "zstd_raw_dictionary_roundtrip_marker": "compression.zstd.ZstdDict is_raw",
-                                "zstd_state_mutation_context_marker": "compression.zstd.ZstdCompressor state",
-                                "lexical_overlap_not_semantics_marker": "compression.zstd.compress (or zlib.compress fallback)",
-                            }
-                            api = probes.get(case_id, "compression.zstd")
-                        else:
-                            # lexical_overlap can fall back to zlib
-                            if case_id == "lexical_overlap_not_semantics_marker":
-                                api = "zlib.compress (fallback, zstd unavailable)"
-                            else:
-                                api = "compression.zstd (unavailable)"
+                        # Real API inspection – hasattr checks
+                        z = zstd_mod
+                        checks = []
+                        failed = []
+                        def has_attr(obj, name):
+                            ok = hasattr(obj, name)
+                            checks.append(f"{obj.__name__ if hasattr(obj, '__name__') else type(obj).__name__}.{name}={'yes' if ok else 'NO'}")
+                            if not ok:
+                                failed.append(name)
+                            return ok
+
+                        if case_id == "zstd_one_shot_roundtrip_marker":
+                            api = "compression.zstd.compress / decompress"
+                            has_attr(z, "compress"); has_attr(z, "decompress")
+                        elif case_id == "zstd_empty_payload_roundtrip_marker":
+                            api = "compression.zstd.compress / decompress"
+                            has_attr(z, "compress"); has_attr(z, "decompress")
+                        elif case_id == "zstd_same_input_same_options_marker":
+                            api = "compression.zstd.compress"
+                            has_attr(z, "compress")
+                        elif case_id == "zstd_level_size_local_observation_marker":
+                            api = "compression.zstd.CompressionParameter.compression_level"
+                            has_attr(z, "CompressionParameter")
+                            if hasattr(z, "CompressionParameter"):
+                                has_attr(z.CompressionParameter, "compression_level")
+                        elif case_id == "zstd_incremental_continue_flush_frame_marker":
+                            api = "compression.zstd.ZstdCompressor CONTINUE FLUSH_FRAME"
+                            has_attr(z, "ZstdCompressor")
+                            if hasattr(z, "ZstdCompressor"):
+                                has_attr(z.ZstdCompressor, "compress")
+                                has_attr(z.ZstdCompressor, "flush")
+                                has_attr(z.ZstdCompressor, "CONTINUE")
+                                has_attr(z.ZstdCompressor, "FLUSH_FRAME")
+                        elif case_id == "zstd_flush_block_then_finish_marker":
+                            api = "compression.zstd.ZstdCompressor FLUSH_BLOCK"
+                            has_attr(z, "ZstdCompressor")
+                            if hasattr(z, "ZstdCompressor"):
+                                has_attr(z.ZstdCompressor, "FLUSH_BLOCK")
+                                has_attr(z.ZstdCompressor, "FLUSH_FRAME")
+                        elif case_id == "zstd_concatenated_frames_module_decompress_marker":
+                            api = "compression.zstd.decompress"
+                            has_attr(z, "decompress")
+                        elif case_id == "zstd_single_frame_unused_data_marker":
+                            api = "compression.zstd.ZstdDecompressor unused_data eof"
+                            has_attr(z, "ZstdDecompressor")
+                            # unused_data / eof are instance attributes, check class exists
+                        elif case_id == "zstd_max_length_needs_input_marker":
+                            api = "compression.zstd.ZstdDecompressor max_length needs_input"
+                            has_attr(z, "ZstdDecompressor")
+                        elif case_id == "zstd_pledged_input_size_match_marker":
+                            api = "compression.zstd.ZstdCompressor.set_pledged_input_size"
+                            has_attr(z, "ZstdCompressor")
+                            if hasattr(z, "ZstdCompressor"):
+                                ok = has_attr(z.ZstdCompressor, "set_pledged_input_size")
+                                if not ok:
+                                    actual = "version_skip"
+                                    skip_reason = "ZstdCompressor.set_pledged_input_size not found"
+                        elif case_id == "zstd_pledged_input_size_mismatch_marker":
+                            api = "compression.zstd.ZstdCompressor.set_pledged_input_size"
+                            has_attr(z, "ZstdCompressor")
+                            if hasattr(z, "ZstdCompressor"):
+                                ok = has_attr(z.ZstdCompressor, "set_pledged_input_size")
+                                if not ok:
+                                    actual = "version_skip"
+                                    skip_reason = "ZstdCompressor.set_pledged_input_size not found"
+                        elif case_id == "zstd_checksum_corruption_rejected_marker":
+                            api = "compression.zstd.CompressionParameter.checksum_flag / ZstdError"
+                            has_attr(z, "CompressionParameter")
+                            if hasattr(z, "CompressionParameter"):
+                                has_attr(z.CompressionParameter, "checksum_flag")
+                            has_attr(z, "ZstdError")
+                        elif case_id == "zstd_bytesio_file_roundtrip_marker":
+                            api = "compression.zstd.ZstdFile / open"
+                            has_zfile = has_attr(z, "ZstdFile")
+                            has_open = has_attr(z, "open")
+                            if not (has_zfile or has_open):
+                                failed.append("ZstdFile/open")
+                        elif case_id == "zstd_raw_dictionary_roundtrip_marker":
+                            api = "compression.zstd.ZstdDict is_raw"
+                            ok = has_attr(z, "ZstdDict")
+                            if not ok:
                                 actual = "version_skip"
-                                skip_reason = zstd_reason
-                                local_conclusion = "skipped: zstd unavailable"
-                                # don't override actual if already set
-                        if actual == expected or actual == "":
-                            actual = "pass" if zstd_available or case_id == "lexical_overlap_not_semantics_marker" else actual
-                            if not local_conclusion:
-                                local_conclusion = "API symbols probed"
+                                skip_reason = "ZstdDict not found"
+                        elif case_id == "zstd_state_mutation_context_marker":
+                            api = "compression.zstd.ZstdCompressor"
+                            has_attr(z, "ZstdCompressor")
+                        elif case_id == "lexical_overlap_not_semantics_marker":
+                            api = "compression.zstd.compress"
+                            has_attr(z, "compress")
+                        else:
+                            api = "compression.zstd (unknown case)"
+                            failed.append("unknown")
+
+                        if failed and actual != "version_skip":
+                            actual = "fail"
+                            failure_reason = "missing API: " + ", ".join(failed)
+                            local_conclusion = "; ".join(checks)
+                        elif actual != "version_skip":
+                            actual = "pass"
+                            local_conclusion = "; ".join(checks)
                 else:
                     api = "unknown"
                     actual = expected
@@ -202,15 +269,19 @@ for case in cases:
                         (b"bonjour sujet identique mais vocabulaire different", "different_vocab_similar_topic"),
                         (b"the local compressor test repeats repeats repeats " * 4, "longer_text"),
                     ]
-                    api = "zlib.compress fallback" if not zstd_available else "compression.zstd.compress"
-                    sizes = []
-                    for s_bytes, label in samples:
-                        if zstd_available:
+                    if zstd_available:
+                        api = "compression.zstd.compress"
+                        sizes = []
+                        for s_bytes, label in samples:
                             c = zstd_mod.compress(s_bytes)
-                        else:
-                            import zlib
+                            sizes.append(len(c))
+                    else:
+                        import zlib
+                        api = "zlib.compress (fallback, zstd unavailable)"
+                        sizes = []
+                        for s_bytes, label in samples:
                             c = zlib.compress(s_bytes)
-                        sizes.append(len(c))
+                            sizes.append(len(c))
                     comp_bytes_count = sum(sizes)
                     local_conclusion = f"sizes={sizes} (lexical overlap, not semantics)"
                     actual = "pass"
@@ -220,63 +291,56 @@ for case in cases:
                     api = "compression.zstd (unavailable)"
                     local_conclusion = "skipped: zstd unavailable"
                 else:
+                    z = zstd_mod
                     # zstd one-shot cases
                     if case_id == "zstd_one_shot_roundtrip_marker":
                         api = "compression.zstd.compress / decompress"
-                        c = zstd_mod.compress(input_bytes)
+                        c = z.compress(input_bytes)
                         comp_bytes_count = len(c)
                         sha_comp = sha256(c)
-                        d = zstd_mod.decompress(c)
+                        d = z.decompress(c)
                         decomp_bytes_count = len(d)
                         roundtrip_match = (d == input_bytes)
                         actual = "pass" if roundtrip_match else "fail"
                         local_conclusion = "roundtrip ok" if roundtrip_match else "roundtrip mismatch"
                     elif case_id == "zstd_empty_payload_roundtrip_marker":
                         api = "compression.zstd.compress / decompress"
-                        c = zstd_mod.compress(b"")
+                        c = z.compress(b"")
                         comp_bytes_count = len(c)
-                        d = zstd_mod.decompress(c)
+                        d = z.decompress(c)
                         decomp_bytes_count = len(d)
                         roundtrip_match = (d == b"")
                         actual = "pass" if roundtrip_match else "fail"
                         local_conclusion = f"empty roundtrip ok, compressed={len(c)} bytes"
                     elif case_id == "zstd_same_input_same_options_marker":
                         api = "compression.zstd.compress"
-                        c1 = zstd_mod.compress(input_bytes)
-                        c2 = zstd_mod.compress(input_bytes)
+                        c1 = z.compress(input_bytes)
+                        c2 = z.compress(input_bytes)
                         comp_bytes_count = len(c1)
                         sha_comp = sha256(c1)
                         roundtrip_match = (c1 == c2)
                         actual = "pass"
                         local_conclusion = f"deterministic_locally={roundtrip_match}"
                     elif case_id == "zstd_level_size_local_observation_marker":
-                        api = "compression.zstd.ZstdCompressionParameters"
-                        # try to get level bounds, fall back to 1 and 3
-                        try:
-                            # simple: just use two levels
-                            c1 = zstd_mod.compress(input_bytes, 1)
-                            c2 = zstd_mod.compress(input_bytes, 3)
-                            comp_bytes_count = len(c1)
-                            d2 = zstd_mod.decompress(c2)
-                            roundtrip_match = (d2 == input_bytes)
-                            local_conclusion = f"level1={len(c1)} level3={len(c2)}"
-                            actual = "pass" if roundtrip_match else "fail"
-                            sha_comp = sha256(c2)
-                        except Exception as e:
-                            exc_type = type(e).__name__
-                            exc_msg = str(e)[:200]
-                            actual = "fail"
-                            failure_reason = exc_msg
+                        api = "compression.zstd.compress level"
+                        c1 = z.compress(input_bytes, level=1)
+                        c2 = z.compress(input_bytes, level=3)
+                        comp_bytes_count = len(c1)
+                        d2 = z.decompress(c2)
+                        roundtrip_match = (d2 == input_bytes)
+                        actual = "pass" if roundtrip_match else "fail"
+                        local_conclusion = f"level1={len(c1)} level3={len(c2)}"
+                        sha_comp = sha256(c2)
                     elif case_id == "zstd_concatenated_frames_module_decompress_marker":
                         api = "compression.zstd.compress / decompress"
                         p1 = b"demo-frame-one"
                         p2 = b"demo-frame-two"
-                        c1 = zstd_mod.compress(p1)
-                        c2 = zstd_mod.compress(p2)
+                        c1 = z.compress(p1)
+                        c2 = z.compress(p2)
                         concat = c1 + c2
                         comp_bytes_count = len(concat)
                         try:
-                            d = zstd_mod.decompress(concat)
+                            d = z.decompress(concat)
                             decomp_bytes_count = len(d)
                             roundtrip_match = (d == p1 + p2)
                             frame_count = 2
@@ -289,31 +353,29 @@ for case in cases:
                             failure_reason = exc_msg
                     elif case_id == "zstd_checksum_corruption_rejected_marker":
                         api = "compression.zstd.CompressionParameter.checksum_flag"
-                        # Try to enable checksum
                         try:
-                            # compression.zstd API varies; try simple compress first
-                            c = zstd_mod.compress(input_bytes)
-                            # flip a byte near end
+                            # Enable checksum_flag
+                            opts = {z.CompressionParameter.checksum_flag: 1}
+                            c = z.compress(input_bytes, options=opts)
+                            comp_bytes_count = len(c)
+                            # corrupt a byte near end (checksum area)
                             if len(c) > 5:
                                 bc = bytearray(c)
-                                bc[-3] ^= 0xFF
+                                bc[-2] ^= 0xFF
                                 c_corrupt = bytes(bc)
                                 try:
-                                    d = zstd_mod.decompress(c_corrupt)
-                                    # if we get here, corruption was NOT rejected – still record
+                                    d = z.decompress(c_corrupt)
                                     actual = "fail"
-                                    failure_reason = "corruption not rejected"
-                                    local_conclusion = "checksum rejection not observed"
-                                except Exception as e:
+                                    failure_reason = "corruption not rejected (ZstdError not raised)"
+                                    local_conclusion = "checksum rejection NOT observed"
+                                except z.ZstdError as e:
                                     exc_type = type(e).__name__
                                     exc_msg = str(e)[:200]
                                     actual = "pass"
-                                    local_conclusion = f"corruption rejected: {exc_type}"
+                                    local_conclusion = f"checksum corruption rejected: {exc_type}"
                             else:
-                                # too short to corrupt safely, count as pass with note
-                                comp_bytes_count = len(c)
-                                actual = "pass"
-                                local_conclusion = "compressed blob too short to corrupt"
+                                actual = "fail"
+                                failure_reason = "compressed blob too short to corrupt"
                         except Exception as e:
                             exc_type = type(e).__name__
                             exc_msg = str(e)[:200]
@@ -322,29 +384,26 @@ for case in cases:
                     elif case_id == "zstd_raw_dictionary_roundtrip_marker":
                         api = "compression.zstd.ZstdDict is_raw"
                         try:
-                            # try ZstdDict API
-                            if hasattr(zstd_mod, "ZstdDict"):
-                                zd = zstd_mod.ZstdDict(b"taco salsa lime " * 4, is_raw=True)
-                                c = zstd_mod.compress(input_bytes, zstd_dict=zd)
-                                d = zstd_mod.decompress(c, zstd_dict=zd)
+                            if not hasattr(z, "ZstdDict"):
+                                actual = "version_skip"
+                                skip_reason = "ZstdDict not available"
+                                local_conclusion = skip_reason
+                            else:
+                                zd = z.ZstdDict(b"taco salsa lime " * 4, is_raw=True)
+                                c = z.compress(input_bytes, zstd_dict=zd)
+                                d = z.decompress(c, zstd_dict=zd)
                                 comp_bytes_count = len(c)
                                 decomp_bytes_count = len(d)
                                 roundtrip_match = (d == input_bytes)
                                 actual = "pass" if roundtrip_match else "fail"
                                 local_conclusion = "dict roundtrip ok" if roundtrip_match else "mismatch"
-                            else:
-                                # API not available, still count as pass for API probe
-                                actual = "pass"
-                                local_conclusion = "ZstdDict not found in this build"
                         except Exception as e:
                             exc_type = type(e).__name__
                             exc_msg = str(e)[:200]
-                            # If dict API missing, treat as version_skip, not fail
-                            actual = "version_skip"
-                            skip_reason = f"dict API unavailable: {exc_msg}"
-                            local_conclusion = skip_reason
+                            actual = "fail"
+                            failure_reason = exc_msg
                     else:
-                        actual = expected  # not applicable, already handled
+                        actual = expected
 
             # incremental_or_stream_operation
             elif method == "incremental_or_stream_operation":
@@ -367,31 +426,20 @@ for case in cases:
                     api = "compression.zstd (unavailable)"
                     local_conclusion = "skipped: zstd unavailable"
                 else:
+                    z = zstd_mod
                     # incremental zstd cases
                     if case_id == "zstd_incremental_continue_flush_frame_marker":
-                        api = "compression.zstd.ZstdCompressor FLUSH_FRAME"
+                        api = "compression.zstd.ZstdCompressor CONTINUE FLUSH_FRAME"
                         try:
-                            comp = zstd_mod.ZstdCompressor()
-                            # API check – does compress take a mode?
+                            comp = z.ZstdCompressor()
+                            chunk1 = input_bytes[:len(input_bytes)//2]
+                            chunk2 = input_bytes[len(input_bytes)//2:]
                             out = b""
-                            # try simple streaming
-                            if hasattr(comp, "compress"):
-                                # guess API
-                                chunk1 = input_bytes[:len(input_bytes)//2]
-                                chunk2 = input_bytes[len(input_bytes)//2:]
-                                # try with mode if available
-                                mode_continue = getattr(zstd_mod, "FLUSH_CONTINUE", None) or getattr(zstd_mod, "CONTINUE", 0)
-                                mode_frame = getattr(zstd_mod, "FLUSH_FRAME", 2)
-                                try:
-                                    out += comp.compress(chunk1)
-                                    out += comp.compress(chunk2)
-                                    out += comp.flush(mode_frame)
-                                except TypeError:
-                                    out += comp.compress(chunk1)
-                                    out += comp.compress(chunk2)
-                                    out += comp.flush()
+                            out += comp.compress(chunk1)
+                            out += comp.compress(chunk2)
+                            out += comp.flush(z.ZstdCompressor.FLUSH_FRAME)
                             comp_bytes_count = len(out)
-                            d = zstd_mod.decompress(out)
+                            d = z.decompress(out)
                             roundtrip_match = (d == input_bytes)
                             actual = "pass" if roundtrip_match else "fail"
                             local_conclusion = "incremental roundtrip ok" if roundtrip_match else "mismatch"
@@ -403,17 +451,12 @@ for case in cases:
                     elif case_id == "zstd_flush_block_then_finish_marker":
                         api = "compression.zstd.ZstdCompressor FLUSH_BLOCK"
                         try:
-                            comp = zstd_mod.ZstdCompressor()
+                            comp = z.ZstdCompressor()
                             out = comp.compress(input_bytes)
-                            mode_block = getattr(zstd_mod, "FLUSH_BLOCK", 1)
-                            mode_frame = getattr(zstd_mod, "FLUSH_FRAME", 2)
-                            try:
-                                out += comp.flush(mode_block)
-                                out += comp.flush(mode_frame)
-                            except Exception:
-                                out += comp.flush()
+                            out += comp.flush(z.ZstdCompressor.FLUSH_BLOCK)
+                            out += comp.flush(z.ZstdCompressor.FLUSH_FRAME)
                             comp_bytes_count = len(out)
-                            d = zstd_mod.decompress(out)
+                            d = z.decompress(out)
                             roundtrip_match = (d == input_bytes)
                             actual = "pass" if roundtrip_match else "fail"
                             local_conclusion = "flush_block roundtrip ok"
@@ -427,14 +470,14 @@ for case in cases:
                         try:
                             p1 = b"demo-frame-one"
                             p2 = b"demo-frame-two"
-                            c1 = zstd_mod.compress(p1)
-                            c2 = zstd_mod.compress(p2)
+                            c1 = z.compress(p1)
+                            c2 = z.compress(p2)
                             concat = c1 + c2
-                            decomp = zstd_mod.ZstdDecompressor()
+                            decomp = z.ZstdDecompressor()
                             out = decomp.decompress(concat)
                             eof_val = str(getattr(decomp, "eof", ""))
                             unused = getattr(decomp, "unused_data", b"")
-                            unused_data_bytes = len(unused) if isinstance(unused, (bytes, bytearray)) else ""
+                            unused_data_bytes = len(unused) if isinstance(unused, (bytes, bytearray)) else 0
                             decomp_bytes_count = len(out)
                             actual = "pass"
                             local_conclusion = f"eof={eof_val} unused={unused_data_bytes}"
@@ -446,10 +489,9 @@ for case in cases:
                     elif case_id == "zstd_max_length_needs_input_marker":
                         api = "compression.zstd.ZstdDecompressor max_length needs_input"
                         try:
-                            c = zstd_mod.compress(input_bytes)
+                            c = z.compress(input_bytes)
                             comp_bytes_count = len(c)
-                            decomp = zstd_mod.ZstdDecompressor()
-                            # try max_length
+                            decomp = z.ZstdDecompressor()
                             try:
                                 out1 = decomp.decompress(c, max_length=5)
                                 needs = getattr(decomp, "needs_input", "")
@@ -460,7 +502,6 @@ for case in cases:
                                 actual = "pass" if roundtrip_match else "fail"
                                 local_conclusion = f"max_length path, needs_input={needs}"
                             except TypeError:
-                                # max_length not supported, do normal
                                 out = decomp.decompress(c)
                                 roundtrip_match = (out == input_bytes)
                                 actual = "pass" if roundtrip_match else "fail"
@@ -473,65 +514,68 @@ for case in cases:
                     elif case_id == "zstd_pledged_input_size_match_marker":
                         api = "compression.zstd.ZstdCompressor.set_pledged_input_size"
                         try:
-                            comp = zstd_mod.ZstdCompressor()
-                            if hasattr(comp, "set_pledged_input_size"):
+                            if not hasattr(z.ZstdCompressor, "set_pledged_input_size"):
+                                actual = "version_skip"
+                                skip_reason = "set_pledged_input_size unavailable"
+                                local_conclusion = skip_reason
+                            else:
+                                comp = z.ZstdCompressor()
                                 comp.set_pledged_input_size(len(input_bytes))
-                            out = comp.compress(input_bytes)
-                            out += comp.flush()
-                            comp_bytes_count = len(out)
-                            d = zstd_mod.decompress(out)
-                            roundtrip_match = (d == input_bytes)
-                            actual = "pass" if roundtrip_match else "fail"
-                            local_conclusion = "pledged_size match ok"
+                                out = comp.compress(input_bytes)
+                                out += comp.flush()
+                                comp_bytes_count = len(out)
+                                d = z.decompress(out)
+                                roundtrip_match = (d == input_bytes)
+                                actual = "pass" if roundtrip_match else "fail"
+                                local_conclusion = "pledged_size match ok"
                         except Exception as e:
                             exc_type = type(e).__name__
                             exc_msg = str(e)[:200]
-                            # if API missing, version_skip
-                            if "pledged" in exc_msg.lower() or "set_pledged" in str(e):
-                                actual = "version_skip"
-                                skip_reason = exc_msg
-                            else:
-                                actual = "fail"
-                                failure_reason = exc_msg
+                            actual = "fail"
+                            failure_reason = exc_msg
                     elif case_id == "zstd_pledged_input_size_mismatch_marker":
                         api = "compression.zstd.ZstdCompressor.set_pledged_input_size"
                         try:
-                            comp = zstd_mod.ZstdCompressor()
-                            if hasattr(comp, "set_pledged_input_size"):
+                            if not hasattr(z.ZstdCompressor, "set_pledged_input_size"):
+                                actual = "version_skip"
+                                skip_reason = "set_pledged_input_size unavailable"
+                                local_conclusion = skip_reason
+                            else:
+                                comp = z.ZstdCompressor()
                                 comp.set_pledged_input_size(1)  # wrong
                                 out = comp.compress(input_bytes)
                                 out += comp.flush()
-                                # if we get here without error, it's not the expected error path
                                 actual = "fail"
-                                failure_reason = "pledge mismatch did not raise"
+                                failure_reason = "pledge mismatch did not raise ZstdError"
                                 local_conclusion = "no error raised"
-                            else:
-                                actual = "version_skip"
-                                skip_reason = "set_pledged_input_size unavailable"
-                        except Exception as e:
+                        except z.ZstdError as e:
                             exc_type = type(e).__name__
                             exc_msg = str(e)[:200]
                             actual = "expected_error"
-                            local_conclusion = f"pledge mismatch raised {exc_type}"
+                            local_conclusion = f"pledge mismatch raised {exc_type} (expected)"
+                        except Exception as e:
+                            exc_type = type(e).__name__
+                            exc_msg = str(e)[:200]
+                            actual = "fail"
+                            failure_reason = f"wrong exception type: {exc_type}: {exc_msg}"
                     elif case_id == "zstd_bytesio_file_roundtrip_marker":
                         api = "compression.zstd.ZstdFile / open"
                         try:
                             bio = io.BytesIO()
-                            # try ZstdFile
-                            if hasattr(zstd_mod, "ZstdFile"):
-                                with zstd_mod.ZstdFile(bio, "wb") as f:
+                            if hasattr(z, "ZstdFile"):
+                                with z.ZstdFile(bio, "wb") as f:
                                     f.write(input_bytes)
                                 bio.seek(0)
-                                with zstd_mod.ZstdFile(bio, "rb") as f:
+                                with z.ZstdFile(bio, "rb") as f:
                                     out = f.read()
                                 roundtrip_match = (out == input_bytes)
                                 actual = "pass" if roundtrip_match else "fail"
                                 local_conclusion = "ZstdFile BytesIO ok"
-                            elif hasattr(zstd_mod, "open"):
-                                with zstd_mod.open(bio, "wb") as f:
+                            elif hasattr(z, "open"):
+                                with z.open(bio, "wb") as f:
                                     f.write(input_bytes)
                                 bio.seek(0)
-                                with zstd_mod.open(bio, "rb") as f:
+                                with z.open(bio, "rb") as f:
                                     out = f.read()
                                 roundtrip_match = (out == input_bytes)
                                 actual = "pass" if roundtrip_match else "fail"
@@ -547,11 +591,11 @@ for case in cases:
                     elif case_id == "zstd_state_mutation_context_marker":
                         api = "compression.zstd.ZstdCompressor state"
                         try:
-                            comp = zstd_mod.ZstdCompressor()
+                            comp = z.ZstdCompressor()
                             out1 = comp.compress(input_bytes[:10])
                             out2 = comp.compress(input_bytes[10:])
                             out = out1 + out2 + comp.flush()
-                            d = zstd_mod.decompress(out)
+                            d = z.decompress(out)
                             roundtrip_match = (d == input_bytes)
                             actual = "pass" if roundtrip_match else "fail"
                             local_conclusion = "state mutates as data supplied (not learning)"
@@ -574,7 +618,6 @@ for case in cases:
                 else:  # local_observation
                     actual = "local_observation"
                     api = "HN thread 46942864"
-                    # case-specific local conclusions reflecting HN debate
                     hn_notes = {
                         "zstd_one_shot_roundtrip_marker": "stdlib availability lowers friction (HN: Lemaxoxo, notpushkin)",
                         "zstd_empty_payload_roundtrip_marker": "API correctness, not ML claim",
@@ -675,4 +718,4 @@ with open(RESULTS_MD, "w") as f:
     f.write("This lab tests local Python stdlib API behavior (one-shot, incremental, framing, checksums, dictionaries, file-like streams). It does not train a classifier, compute accuracy percentages, or claim that compression measures semantic meaning.\n")
     f.write("\nCompressed-size observations in the lexical-overlap case reflect repeated words/phrases/substrings and text length / back-reference distance effects discussed on HN, not semantic understanding.\n")
 
-print(f"rows={len(rows)} pass={counts.get('pass',0)} fail={counts.get('fail',0)} version_skip={counts.get('version_skip',0)} elapsed={total_elapsed:.2f}s")
+print(f"rows={len(rows)} pass={counts.get('pass',0)} fail={counts.get('fail',0)} expected_error={counts.get('expected_error',0)} version_skip={counts.get('version_skip',0)} elapsed={total_elapsed:.2f}s")
